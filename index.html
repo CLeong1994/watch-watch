@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Haze Watch</title>
+<meta name="description" content="Live haze, PSI and weather for Singapore and air quality across ASEAN.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='%23D9822B'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: same calm card dashboard as Haze Watch. Hero reading + pollutants on top, map with a region panel, then a new weather block. */
+:root{
+  --bg:#F2F3EF; --surface:#FFFFFF; --sunk:#F7F8F5; --ink:#1D2321; --muted:#68716C; --line:#E1E4DE;
+  --accent:#D9822B; --accent-ink:#8A4E12; --accent-soft:#FBEBDA;
+  --b-good:#3F9A78; --b-mod:#C4A12A; --b-usg:#E0913A; --b-unh:#D35F3D; --b-vun:#B03E55; --b-haz:#73305F; --b-none:#B9BFBA;
+  --rain:#4C86B8; --map-water:#E7EEF0; --map-stroke:#FFFFFF; --scrim:rgba(20,24,22,.32);
+  --f-display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --f-body:"Figtree","Segoe UI",system-ui,-apple-system,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:16px; --shadow:0 1px 2px rgba(29,35,33,.05),0 6px 20px rgba(29,35,33,.04);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#131715; --surface:#1B201E; --sunk:#171B19; --ink:#E7EBE8; --muted:#9BA49F; --line:#2A312E;
+  --accent:#F0A157; --accent-ink:#F6C08C; --accent-soft:#3A2A1A;
+  --b-good:#4FB48E; --b-mod:#D6B640; --b-usg:#EBA151; --b-unh:#E3714F; --b-vun:#CF5A72; --b-haz:#A9558C; --b-none:#4A524E;
+  --rain:#77A9D6; --map-water:#18222A; --map-stroke:#1B201E; --scrim:rgba(0,0,0,.5); --shadow:none; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#131715; --surface:#1B201E; --sunk:#171B19; --ink:#E7EBE8; --muted:#9BA49F; --line:#2A312E;
+  --accent:#F0A157; --accent-ink:#F6C08C; --accent-soft:#3A2A1A;
+  --b-good:#4FB48E; --b-mod:#D6B640; --b-usg:#EBA151; --b-unh:#E3714F; --b-vun:#CF5A72; --b-haz:#A9558C; --b-none:#4A524E;
+  --rain:#77A9D6; --map-water:#18222A; --map-stroke:#1B201E; --scrim:rgba(0,0,0,.5); --shadow:none; color-scheme:dark }
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 24px 64px;display:flex;flex-direction:column;gap:24px}
+h1,h2,h3{font-family:var(--f-display);font-weight:700;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(1.7rem,3.4vw,2.3rem);line-height:1.1} h2{font-size:1.25rem} h3{font-size:1rem;font-weight:500}
+.eyebrow{font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:22px;min-width:0}
+.pill{display:inline-block;font-size:.75rem;font-weight:600;padding:3px 10px;border-radius:999px;color:#fff;white-space:nowrap}
+.ref{font-size:.72rem;color:var(--accent-ink);background:var(--accent-soft);border-radius:6px;padding:2px 8px;text-decoration:none;white-space:nowrap}
+.ref:hover{text-decoration:underline}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px}
+.brand{display:flex;flex-direction:column;gap:6px}
+.brand .dot{display:inline-block;width:.55em;height:.55em;border-radius:50%;background:var(--accent);margin-right:.4em;vertical-align:.12em}
+.notice{font-size:.86rem;background:var(--accent-soft);border-radius:12px;padding:12px 16px;line-height:1.45}
+.notice b{color:var(--accent-ink)}
+
+/* section labels that tie each block to its Mobbin pattern */
+.pattern{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:.8rem;color:var(--muted)}
+.pattern .n{font-family:var(--f-mono);color:var(--accent-ink)}
+
+/* 1 + 2: hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:center}
+.reading{display:flex;flex-direction:column;gap:10px}
+.reading .big{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.reading .big .num{font-size:clamp(3.6rem,9vw,5.4rem);line-height:.9;font-weight:500}
+.reading .band{font-family:var(--f-display);font-size:1.5rem;font-weight:700}
+.reading .cmp{font-size:.9rem;color:var(--muted)}
+.scale{position:relative;margin-top:8px;padding-top:18px}
+.scale .track{height:8px;border-radius:999px;background:linear-gradient(90deg,var(--b-good) 0%,var(--b-good) 10.5%,var(--b-mod) 14.5%,var(--b-mod) 23%,var(--b-unh) 27%,var(--b-unh) 48%,var(--b-vun) 52%,var(--b-vun) 73%,var(--b-haz) 77%)}
+.scale .mark{position:absolute;top:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:2px}
+.scale .mark span{font:500 .72rem var(--f-mono);color:var(--ink)}
+.scale .mark i{width:14px;height:14px;border-radius:50%;background:var(--surface);border:3px solid var(--ink);margin-top:-1px}
+.scale .ticks{position:relative;height:16px;margin-top:6px;font:400 .68rem var(--f-mono);color:var(--muted)}
+.scale .ticks span{position:absolute;transform:translateX(-50%)}
+.scale .ticks span:first-child{transform:none} .scale .ticks span:last-child{transform:translateX(-100%)}
+
+.side-stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+.pollutants{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.pol{background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0;position:relative}
+.pol.primary{border-color:var(--accent);background:var(--accent-soft)}
+.pol .k{font-size:.78rem;font-weight:600}
+.pol .v{font:500 1.5rem/1.1 var(--f-mono);font-variant-numeric:tabular-nums}
+.pol .u{font-size:.7rem;color:var(--muted)}
+.pol .lvl{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.pol .lvl b{display:block;height:100%;border-radius:2px}
+.pol .tag{position:absolute;top:-9px;right:10px;font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:var(--accent);color:#24170A;border-radius:999px;padding:1px 8px}
+.todo{border-radius:12px;padding:14px 16px;background:var(--sunk);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.todo ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:.88rem}
+.todo li{display:flex;gap:10px;align-items:flex-start}
+.todo li::before{content:"";flex:0 0 8px;height:8px;border-radius:50%;background:var(--accent);margin-top:.45em}
+
+/* 3: map with region panel */
+.mapgrid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:0;padding:0;overflow:hidden}
+.mapside{padding:22px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.mapbox{background:var(--map-water);border-radius:12px;overflow:hidden}
+.mapbox svg{display:block;width:100%;height:auto}
+path.region{cursor:pointer;stroke:var(--map-stroke);stroke-width:3;transition:opacity .2s}
+path.region:hover{opacity:.85}
+.coast{fill:none;stroke:var(--ink);stroke-opacity:.18;stroke-width:1.5}
+.sel-outline{fill:none;stroke:var(--ink);stroke-width:3.5;pointer-events:none}
+.maplabel{pointer-events:none;text-anchor:middle;fill:#fff}
+.maplabel .v{font:600 30px var(--f-mono)} .maplabel .n{font:600 13px var(--f-body);letter-spacing:.08em;text-transform:uppercase;opacity:.92}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.rchip{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px 5px 8px;cursor:pointer;font-size:.82rem}
+.rchip i{width:10px;height:10px;border-radius:50%}
+.rchip[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset}
+
+.sheet{border-left:1px solid var(--line);background:var(--sunk);padding:22px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.sheet .grab{display:none}
+.sheet .head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.sheet .close{display:none;border:0;background:var(--line);width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1rem;line-height:1}
+.sheet .big{display:flex;align-items:baseline;gap:10px}
+.sheet .big .num{font-size:2.8rem;line-height:1;font-weight:500}
+.kv{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin:0}
+.kv div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.kv dt{font-size:.74rem;color:var(--muted)} .kv dd{margin:0;font:500 1.02rem var(--f-mono);font-variant-numeric:tabular-nums}
+.kv dd small{font-family:var(--f-body);font-size:.72rem;color:var(--muted);margin-left:3px}
+.mini-hours{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.mini-hours div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:.7rem;color:var(--muted)}
+.mini-hours b{display:block;width:100%;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font:500 .78rem var(--f-mono);color:#fff}
+.scrim{display:none}
+
+/* weather */
+.wx{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:20px}
+.now{display:flex;flex-direction:column;gap:16px}
+.now .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.now .temp{font:500 clamp(3.4rem,8vw,4.6rem)/.9 var(--f-mono)}
+.now .cond{font-family:var(--f-display);font-size:1.3rem;font-weight:700}
+.hours{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}
+.hour{flex:0 0 64px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 4px;border-radius:12px;background:var(--sunk);border:1px solid var(--line);font-size:.75rem}
+.hour.now-h{background:var(--accent-soft);border-color:var(--accent)}
+.hour .t{color:var(--muted)} .hour .tp{font:500 1rem var(--f-mono)}
+.hour .rn{color:var(--rain);font:500 .7rem var(--f-mono);min-height:1em}
+.hour .pm{width:100%;height:4px;border-radius:2px}
+.icon{width:24px;height:24px}
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.tile{background:var(--sunk);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tile .k{font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.tile .v{font:500 1.3rem var(--f-mono)} .tile .s{font-size:.75rem;color:var(--muted)}
+.days{display:flex;flex-direction:column}
+.day{display:grid;grid-template-columns:54px 28px 44px 38px minmax(60px,1fr) 38px;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:.9rem}
+.day:first-child{border-top:0}
+.day .rn{color:var(--rain);font:500 .75rem var(--f-mono)}
+.day .lo,.day .hi{font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.day .lo{color:var(--muted)}
+.range{position:relative;height:6px;border-radius:999px;background:var(--line)}
+.range b{position:absolute;top:0;bottom:0;border-radius:999px;background:linear-gradient(90deg,#E9B24A,var(--accent))}
+.day .haze{font-size:.68rem;color:var(--muted);grid-column:3/7;margin-top:-6px;display:flex;align-items:center;gap:6px}
+.day .haze i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.wx-right{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+/* 4: band reference */
+.bands{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.bands li{display:grid;grid-template-columns:72px minmax(0,1fr);gap:4px 12px;padding:8px 12px;border-left:4px solid;border-radius:4px 8px 8px 4px;background:var(--surface);font-size:.82rem}
+.bands li b{font-family:var(--f-mono);font-weight:500}
+.bands li span:first-of-type{font-weight:600}
+.bands li.cur{box-shadow:0 0 0 1px var(--ink) inset}
+.bands li .d{grid-column:2;color:var(--muted)}
+details.ref-list summary{cursor:pointer;font-size:.82rem;font-weight:600;color:var(--accent-ink);list-style:none}
+details.ref-list summary::-webkit-details-marker{display:none}
+details.ref-list summary::before{content:"+ "} details.ref-list[open] summary::before{content:"− "}
+/* 5: 24-hour PM2.5 strip */
+.day24{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;align-items:end;height:96px}
+.day24 div{border-radius:4px 4px 2px 2px;position:relative;min-height:6px}
+.day24 div.now{outline:2px solid var(--ink);outline-offset:1px}
+.day24-axis{display:grid;grid-template-columns:repeat(24,minmax(0,1fr));gap:3px;font:400 .66rem var(--f-mono);color:var(--muted);margin-top:6px}
+.day24-axis span{white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.76rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+/* 6: city tiles */
+.cities{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.ct{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0;aspect-ratio:1/1;max-width:100%;justify-content:space-between}
+.ct .row{display:flex;justify-content:space-between;align-items:flex-start;gap:6px}
+.ct .k{font:500 .66rem var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);line-height:1.3}
+.ct .k b{display:block;font-weight:500;color:var(--ink)}
+.ct i{width:9px;height:9px;border-radius:50%;flex:0 0 9px;margin-top:2px}
+.ct .word{font:700 clamp(1.6rem,4vw,2.1rem)/1 var(--f-display);letter-spacing:-.02em}
+.ct .foot{display:flex;justify-content:space-between;font:400 .72rem var(--f-mono);color:var(--muted)}
+.ct.hot{border-color:var(--accent);background:var(--accent-soft)}
+footer{font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding-top:20px;display:flex;flex-direction:column;gap:6px}
+footer a{color:var(--accent-ink)}
+
+@media (max-width:900px){
+  .hero,.wx{grid-template-columns:1fr}
+  .mapgrid{grid-template-columns:1fr}
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:20;border:1px solid var(--line);border-bottom:0;border-radius:20px 20px 0 0;background:var(--surface);
+    padding:10px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:78vh;overflow-y:auto;transform:translateY(105%);transition:transform .28s ease;box-shadow:0 -10px 30px rgba(0,0,0,.12)}
+  .sheet:not(.open){visibility:hidden;transition:transform .28s ease,visibility 0s .28s}
+  .sheet.open{transform:none}
+  .sheet .grab{display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 4px}
+  .sheet .close{display:inline-block}
+  .scrim{display:block;position:fixed;inset:0;background:var(--scrim);z-index:19;opacity:0;pointer-events:none;transition:opacity .28s}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .hint{display:inline}
+}
+@media (min-width:901px){ .hint{display:none} }
+@media (max-width:520px){
+  .wrap{padding:20px 16px 48px}
+  .pollutants{gap:8px} .pol{padding:10px} .pol .v{font-size:1.25rem}
+  .tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cities{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .day24-axis span:nth-child(odd){visibility:hidden}
+  .day{grid-template-columns:44px 24px 34px 32px minmax(40px,1fr) 32px;gap:8px}
+  .maplabel .v{font-size:36px} .maplabel .n{font-size:16px}
+}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+/* live-data additions */
+.status{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:.8rem;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;background:var(--surface)}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--b-none)}
+.chip.live i{background:var(--b-good)} .chip.snap i,.chip.ex i{background:var(--accent)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;cursor:pointer;font-size:.8rem}
+.btn:disabled{opacity:.6;cursor:default}
+.tag-ex{font-size:.62rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink);background:var(--accent-soft);border-radius:999px;padding:1px 8px;vertical-align:.15em;margin-left:6px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <span class="eyebrow"><span class="dot"></span>Singapore and ASEAN</span>
+      <h1>Haze Watch</h1>
+    </div>
+    <div class="status">
+      <span class="chip" id="chip-nea"><i></i>NEA PSI…</span>
+      <span class="chip" id="chip-om"><i></i>Open-Meteo…</span>
+      <span class="num" id="updated">Checking live data…</span>
+      <button class="btn" id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <!-- hero reading, scale bar, pollutant row, advice -->
+  <section class="card" aria-labelledby="h-now">
+    <div class="hero">
+      <div class="reading">
+        <span class="eyebrow" id="h-now">Singapore now · highest 24-hr PSI</span>
+        <div class="big"><span class="num" id="hero-psi">—</span><span class="band" id="hero-band"></span></div>
+        <div class="cmp" id="hero-cmp"></div>
+        <div class="scale" id="hero-scale" role="img" aria-label="PSI scale from 0 to 400">
+          <div class="mark" id="mark" style="left:0"><span id="mark-v"></span><i></i></div>
+          <div class="track"></div>
+          <div class="ticks"><span style="left:0">0</span><span style="left:12.5%">50</span><span style="left:25%">100</span><span style="left:50%">200</span><span style="left:75%">300</span><span style="left:100%">400</span></div>
+        </div>
+        <span class="muted num" style="font-size:.78rem" id="nea-time"></span>
+      </div>
+      <div class="side-stack">
+        <span class="eyebrow" id="pol-head">Pollutants</span>
+        <div class="pollutants" id="pollutants"></div>
+        <div class="todo">
+          <span class="eyebrow">What to do today</span>
+          <ul id="advice"></ul>
+          <details class="ref-list" id="bands-ref">
+            <summary>All PSI bands and what they mean</summary>
+            <ul class="bands" id="bands"></ul>
+          </details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 24-hour PM2.5 strip -->
+  <section class="card" style="display:flex;flex-direction:column;gap:12px" aria-labelledby="h-24">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <h2 id="h-24">PM2.5 over the last 24 hours</h2>
+        <span class="muted" style="font-size:.85rem" id="day24-cap"></span>
+      </div>
+      <div class="legend"><span><i style="background:var(--b-good)"></i>Band I 0–55</span><span><i style="background:var(--b-usg)"></i>Band II 56–150</span><span><i style="background:var(--b-unh)"></i>Band III 151–250</span><span><i style="background:var(--b-haz)"></i>Band IV 251+</span></div>
+    </div>
+    <div style="overflow-x:auto"><div style="min-width:320px">
+      <div class="day24" id="day24" role="img" aria-label="Bar chart of hourly PM2.5 over the last 24 hours"></div>
+      <div class="day24-axis" id="day24-axis"></div>
+    </div></div>
+  </section>
+
+  <!-- map with region panel -->
+  <section class="card mapgrid" aria-labelledby="h-map">
+    <div class="mapside">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <h2 id="h-map">PSI by region</h2><span class="muted hint" style="font-size:.8rem">Tap a region for details</span>
+      </div>
+      <div class="mapbox"><svg id="map" viewBox="0 0 920 480" role="img" aria-label="Map of Singapore's five regions coloured by 24-hour PSI"></svg></div>
+      <div class="chips" id="chips" aria-label="Regions"></div>
+    </div>
+    <div class="scrim" id="scrim"></div>
+    <aside class="sheet" id="sheet" aria-live="polite" aria-labelledby="sh-name">
+      <span class="grab"></span>
+      <div class="head">
+        <div><span class="eyebrow">Selected region</span><h2 id="sh-name">Central</h2></div>
+        <button class="close" id="sh-close" type="button" aria-label="Close region panel">✕</button>
+      </div>
+      <div class="big"><span class="num" id="sh-psi">—</span><span id="sh-pill"></span></div>
+      <div class="scale" style="padding-top:0"><div class="track"></div><div class="mark" id="sh-mark" style="top:-4px"><i></i></div></div>
+      <dl class="kv" id="sh-kv"></dl>
+      <div>
+        <span class="eyebrow">PM2.5 next 6 hours · forecast</span>
+        <div class="mini-hours" id="sh-hours" style="margin-top:8px"></div>
+      </div>
+      <p class="muted" style="margin:0;font-size:.85rem" id="sh-advice"></p>
+    </aside>
+  </section>
+
+  <!-- weather -->
+  <section style="display:flex;flex-direction:column;gap:14px" aria-labelledby="h-wx">
+    <div><h2 id="h-wx">Weather in Singapore</h2></div>
+    <div class="wx">
+      <div class="card now">
+        <div class="top">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span class="eyebrow">Now · Island-wide</span>
+            <span class="temp" id="wx-temp">—</span>
+            <span class="cond" id="wx-cond"></span>
+            <span class="muted" style="font-size:.85rem" id="wx-sub"></span>
+          </div>
+          <span id="wx-icon"></span>
+        </div>
+        <div>
+          <span class="eyebrow">Next 12 hours · bar shows PM2.5 band</span>
+          <div class="hours" id="hours" style="margin-top:8px"></div>
+        </div>
+        <div class="tiles" id="tiles"></div>
+      </div>
+      <div class="wx-right">
+        <div class="card">
+          <span class="eyebrow">Next 7 days · dot shows expected haze</span>
+          <div class="days" id="days" style="margin-top:6px"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ASEAN city tiles -->
+  <section style="display:flex;flex-direction:column;gap:14px" aria-labelledby="h-asean">
+    <div><span class="eyebrow">US AQI</span><h2 id="h-asean">Across ASEAN</h2></div>
+    <div class="cities" id="cities"></div>
+    <span class="muted" style="font-size:.78rem">Tiles with an orange edge are fire hotspot areas. Short words: GOOD, MOD (moderate), USG (unhealthy for sensitive groups), UNH (unhealthy), V.UNH (very unhealthy), HAZ (hazardous).</span>
+  </section>
+
+  <footer>
+    <span>PSI and PM2.5 for the five regions from the National Environment Agency via <a href="https://data.gov.sg" target="_blank" rel="noopener">data.gov.sg</a>. Weather, forecasts and city air quality from <a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> (CAMS model). Daily haze dots are estimates from forecast PM2.5, not NEA forecasts. The map is schematic. Refreshes every 15 minutes while open.</span>
+  </footer>
+</div>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const PSI_BANDS=[[50,'Good','--b-good','Normal activities.'],[100,'Moderate','--b-mod','Normal activities.'],[200,'Unhealthy','--b-unh','Healthy people should reduce long or strenuous outdoor exertion. Sensitive groups should avoid it.'],[300,'Very unhealthy','--b-vun','Avoid long or strenuous outdoor exertion.'],[Infinity,'Hazardous','--b-haz','Minimise outdoor activity.']];
+const PM_BANDS=[[55,'Band I','--b-good'],[150,'Band II','--b-usg'],[250,'Band III','--b-unh'],[Infinity,'Band IV','--b-haz']];
+const AQI_BANDS=[[50,'GOOD','--b-good'],[100,'MOD','--b-mod'],[150,'USG','--b-usg'],[200,'UNH','--b-unh'],[300,'V.UNH','--b-vun'],[Infinity,'HAZ','--b-haz']];
+const ADVICE={
+  Good:['Normal activities for everyone.'],
+  Moderate:['Normal activities for everyone.','People with heart or lung conditions should watch for symptoms.'],
+  Unhealthy:['Healthy people: cut down on long or strenuous outdoor exercise.','Elderly, children, pregnant women and people with heart or lung conditions: avoid it.','Keep windows closed while PM2.5 is high. Check the 24-hour strip below.'],
+  'Very unhealthy':['Healthy people: avoid long or strenuous outdoor exercise.','Elderly, children, pregnant women and people with heart or lung conditions: minimise outdoor activity.','If you must be outdoors for long, a well-fitted N95 mask helps.'],
+  Hazardous:['Everyone: minimise outdoor activity.','Elderly, children, pregnant women and people with heart or lung conditions: avoid outdoor activity.','Stay in air-conditioned or purified rooms where you can, and wear an N95 mask outdoors.']
+};
+const band=(v,B)=>v==null||isNaN(v)?null:B.find(b=>v<=b[0]);
+const v=n=>`var(${n})`;
+const pos=psi=>Math.max(0,Math.min(psi,400))/400*100;
+const fmt=(x,d=0)=>x==null||isNaN(x)?'—':Number(x).toFixed(d);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const DIRS=['N','NE','E','SE','S','SW','W','NW'];
+const dir=d=>d==null?'':DIRS[Math.round(d/45)%8];
+const WMO={0:'Clear',1:'Mostly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',56:'Freezing drizzle',57:'Freezing drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',66:'Freezing rain',67:'Freezing rain',71:'Light snow',73:'Snow',75:'Heavy snow',80:'Showers',81:'Showers',82:'Heavy showers',95:'Thunderstorms',96:'Thunderstorms, hail',99:'Thunderstorms, hail'};
+const SGT='Asia/Singapore';
+const sgDate=d=>new Intl.DateTimeFormat('en-CA',{timeZone:SGT,year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
+const sgHour=d=>+new Intl.DateTimeFormat('en-GB',{timeZone:SGT,hour:'2-digit',hourCycle:'h23'}).format(d);
+const hShort=h=>h===0?'12a':h===12?'12p':h>12?(h-12)+'p':h+'a';
+const hLong=h=>h===0?'12 am':h===12?'12 pm':h>12?(h-12)+' pm':h+' am';
+
+const REGIONS=[
+  {id:'north',name:'North',lat:1.41803,lon:103.82,poly:[[103.745,1.5],[103.89,1.5],[103.89,1.385],[103.745,1.385]]},
+  {id:'west',name:'West',lat:1.35735,lon:103.70,poly:[[103.55,1.5],[103.745,1.5],[103.745,1.2],[103.55,1.2]]},
+  {id:'central',name:'Central',lat:1.35735,lon:103.82,poly:[[103.745,1.385],[103.89,1.385],[103.89,1.305],[103.745,1.305]]},
+  {id:'east',name:'East',lat:1.35735,lon:103.94,poly:[[103.89,1.5],[104.1,1.5],[104.1,1.2],[103.89,1.2]]},
+  {id:'south',name:'South',lat:1.29587,lon:103.82,poly:[[103.745,1.305],[103.89,1.305],[103.89,1.2],[103.745,1.2]]}
+];
+const CITIES=[
+  {name:'Singapore',cc:'SG',lat:1.29,lon:103.85},
+  {name:'Kuala Lumpur',cc:'MY',lat:3.14,lon:101.69},
+  {name:'Jakarta',cc:'ID',lat:-6.21,lon:106.85},
+  {name:'Bangkok',cc:'TH',lat:13.76,lon:100.50},
+  {name:'Manila',cc:'PH',lat:14.60,lon:120.98},
+  {name:'Hanoi',cc:'VN',lat:21.03,lon:105.85},
+  {name:'Ho Chi Minh City',cc:'VN',lat:10.82,lon:106.63},
+  {name:'Phnom Penh',cc:'KH',lat:11.56,lon:104.92},
+  {name:'Bandar Seri Begawan',cc:'BN',lat:4.94,lon:114.95},
+  {name:'Pekanbaru',cc:'ID · Riau',lat:0.51,lon:101.45,hot:true},
+  {name:'Palembang',cc:'ID · S. Sumatra',lat:-2.99,lon:104.76,hot:true},
+  {name:'Kuching',cc:'MY · Sarawak',lat:1.55,lon:110.36,hot:true}
+];
+const SG={lat:1.3521,lon:103.8198};
+
+/* ---------- example values (shown until live data arrives, and if a source can't be reached) ---------- */
+// Based on the NEA reading of 6 Oct 2026 12:00 SGT
+function exampleNEA(){
+  const now=new Date(); const h=sgHour(now);
+  const PM24=[66,61,55,49,44,40,37,34,31,30,29,32,38,45,51,55,58,63,68,72,70,64,60,58];
+  return {time:'2026-10-06T12:00:00+08:00',
+    psi:{north:109,west:113,central:131,east:116,south:101}, psiYest:null,
+    pm25:{north:47,west:61,central:58,east:52,south:44},
+    pm10:{north:66,west:78,central:74,east:70,south:60}, o3:{north:29,west:33,central:31,east:30,south:28},
+    sub:{north:{pm25:109,pm10:56,o3:13},west:{pm25:113,pm10:62,o3:14},central:{pm25:131,pm10:60,o3:13},east:{pm25:116,pm10:58,o3:13},south:{pm25:101,pm10:53,o3:12}},
+    strip:PM24.map((x,i)=>({h:(h+1+i)%24,day:i<23-h?'yesterday':'today',v:x}))};
+}
+function exampleOM(){
+  const h=sgHour(new Date());
+  const reg={north:[31,72,13,225,6.0,[49,55,62,58,44,38]],west:[32,70,15,225,4.8,[64,71,77,69,52,41]],central:[31,74,14,225,5.2,[60,66,70,63,48,40]],east:[30,76,12,225,5.6,[55,58,61,54,42,36]],south:[31,75,16,225,6.4,[46,50,53,47,39,33]]};
+  const regions={};
+  Object.entries(reg).forEach(([id,r])=>regions[id]={temp:r[0],hum:r[1],wind:r[2],windDir:r[3],vis:r[4],next:r[5].map((x,i)=>({h:(h+1+i)%24,v:x}))});
+  const HOURS=[[2,31,10,58],[3,31,30,60],[95,29,60,66],[95,27,70,70],[61,27,50,63],[3,27,20,48],[1,27,10,40],[1,26,0,37],[1,26,0,35],[1,26,0,34],[1,26,0,33],[2,26,0,36]];
+  const DAYS=[['Today',95,26,33,60,131],['Thu',2,26,33,30,140],['Fri',95,25,32,70,118],['Sat',61,25,31,80,96],['Sun',3,25,32,40,84],['Mon',0,26,33,20,78],['Tue',95,25,32,60,90]];
+  const AQI=[152,138,121,84,62,97,71,78,104,214,187,162], CT=[31,32,33,33,31,29,32,33,31,32,33,31];
+  return {regions,
+    sg:{cur:{temp:31,feels:37,code:2,isDay:1,hum:74,dew:26,wind:14,windDir:225,vis:5.2,uv:7},
+      hours:HOURS.map((x,i)=>({h:(h+i)%24,code:x[0],isDay:((h+i)%24)>=7&&((h+i)%24)<19?1:0,temp:x[1],pop:x[2],pm:x[3]})),
+      days:DAYS.map(d=>({label:d[0],code:d[1],lo:d[2],hi:d[3],pop:d[4],psi:d[5]})),
+      sunset:'18:58',popToday:60},
+    cities:CITIES.map((c,i)=>({...c,aqi:AQI[i],temp:CT[i]}))};
+}
+
+/* ---------- live data ---------- */
+async function getJSON(url,ms=10000){
+  const c=new AbortController(); const t=setTimeout(()=>c.abort(),ms);
+  try{const r=await fetch(url,{signal:c.signal}); if(!r.ok) throw new Error(r.status); return await r.json();}
+  finally{clearTimeout(t)}
+}
+// NEA via this site's /api/nea proxy (on Vercel), falling back to calling data.gov.sg directly.
+async function nea(ep,date){
+  const q=date?`?date=${date}`:'';
+  const tries=[];
+  if(location.protocol.startsWith('http')) tries.push(`/api/nea?ep=${ep}${date?'&date='+date:''}`);
+  tries.push(`https://api-open.data.gov.sg/v2/real-time/api/${ep}${q}`);
+  for(const u of tries){
+    try{const j=await getJSON(u); const items=j&&j.data&&j.data.items; if(items&&items.length) return items;}catch(e){}
+  }
+  throw new Error('NEA unreachable');
+}
+async function loadNEA(){
+  const now=new Date(), today=sgDate(now), yest=sgDate(new Date(now-864e5));
+  const [psiNow,psiY,pmT,pmY]=await Promise.allSettled([nea('psi'),nea('psi',yest),nea('pm25',today),nea('pm25',yest)]);
+  if(psiNow.status!=='fulfilled') return null;
+  const it=psiNow.value[psiNow.value.length-1], R=it.readings;
+  const out={time:it.timestamp,psi:R.psi_twenty_four_hourly,pm10:R.pm10_twenty_four_hourly||{},o3:R.o3_eight_hour_max||{},sub:{},psiYest:null,pm25:{},strip:null};
+  REGIONS.forEach(r=>out.sub[r.id]={pm25:(R.pm25_sub_index||{})[r.id],pm10:(R.pm10_sub_index||{})[r.id],o3:(R.o3_sub_index||{})[r.id]});
+  if(psiY.status==='fulfilled'){ // same hour yesterday
+    const hh=it.timestamp.slice(11,13), y=psiY.value.find(x=>x.timestamp.slice(11,13)===hh);
+    if(y) out.psiYest=y.readings.psi_twenty_four_hourly;
+  }
+  const pmItems=[...(pmY.status==='fulfilled'?pmY.value:[]),...(pmT.status==='fulfilled'?pmT.value:[])].sort((a,b)=>a.timestamp<b.timestamp?-1:1);
+  if(pmItems.length){
+    out.pm25=pmItems[pmItems.length-1].readings.pm25_one_hourly||{};
+    out.strip=pmItems.slice(-24).map(x=>{const vals=Object.values(x.readings.pm25_one_hourly||{}).filter(n=>typeof n==='number');
+      return {h:+x.timestamp.slice(11,13),day:x.timestamp.slice(0,10)===today?'today':'yesterday',v:vals.length?Math.max(...vals):null};});
+  }else{
+    // 24-hr PM2.5 from the PSI feed when the 1-hr feed is missing
+    out.pm25=R.pm25_twenty_four_hourly||{}; out.pm25is24=true;
+  }
+  return out;
+}
+const arr=x=>Array.isArray(x)?x:[x];
+const startIdx=(times,cur)=>{const k=(cur||'').slice(0,13)+':00'; const i=times.findIndex(t=>t>=k); return i<0?0:i;};
+async function loadOM(){
+  const pts=[...REGIONS,...CITIES], lat=pts.map(p=>p.lat).join(','), lon=pts.map(p=>p.lon).join(',');
+  const tz='Asia%2FSingapore';
+  const [fc,aqSg,wxPts,aqPts]=await Promise.all([
+    getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${SG.lat}&longitude=${SG.lon}&current=temperature_2m,apparent_temperature,relative_humidity_2m,dew_point_2m,weather_code,is_day,wind_speed_10m,wind_direction_10m,visibility,uv_index&hourly=temperature_2m,weather_code,precipitation_probability,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunset&forecast_days=7&timezone=${tz}`),
+    getJSON(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${SG.lat}&longitude=${SG.lon}&hourly=pm2_5&past_days=1&forecast_days=7&timezone=${tz}`),
+    getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,visibility&timezone=${tz}`),
+    getJSON(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi&hourly=pm2_5&forecast_days=2&timezone=${tz}`)
+  ]);
+  const W=arr(wxPts), A=arr(aqPts);
+  const regions={};
+  REGIONS.forEach((r,i)=>{const c=W[i].current, a=A[i], s=startIdx(a.hourly.time,a.current&&a.current.time);
+    regions[r.id]={temp:c.temperature_2m,hum:c.relative_humidity_2m,wind:c.wind_speed_10m,windDir:c.wind_direction_10m,vis:c.visibility!=null?c.visibility/1000:null,
+      next:a.hourly.time.slice(s+1,s+7).map((t,k)=>({h:+t.slice(11,13),v:a.hourly.pm2_5[s+1+k]}))};});
+  const cities=CITIES.map((c,i)=>{const k=REGIONS.length+i; return {...c,aqi:A[k].current&&A[k].current.us_aqi,temp:W[k].current&&W[k].current.temperature_2m};});
+  // Singapore detail
+  const cur=fc.current, H=fc.hourly, D=fc.daily, s=startIdx(H.time,cur.time);
+  const pmAt={}; aqSg.hourly.time.forEach((t,i)=>pmAt[t]=aqSg.hourly.pm2_5[i]);
+  const hours=H.time.slice(s,s+12).map((t,k)=>({h:+t.slice(11,13),code:H.weather_code[s+k],isDay:H.is_day[s+k],temp:H.temperature_2m[s+k],pop:H.precipitation_probability[s+k],pm:pmAt[t]}));
+  const todayKey=D.time[0];
+  const days=D.time.map((d,i)=>{
+    const pm=aqSg.hourly.time.map((t,k)=>t.startsWith(d)?aqSg.hourly.pm2_5[k]:null).filter(x=>typeof x==='number');
+    const mean=pm.length>=12?pm.reduce((a,b)=>a+b,0)/pm.length:null;
+    return {label:i===0?'Today':new Date(d+'T12:00:00+08:00').toLocaleDateString('en-SG',{weekday:'short',timeZone:SGT}),
+      code:D.weather_code[i],lo:D.temperature_2m_min[i],hi:D.temperature_2m_max[i],pop:D.precipitation_probability_max[i],psi:mean==null?null:pm25ToPsi(mean)};});
+  // the hour with the highest rain chance in what's left of today
+  let rainPeak=null; H.time.forEach((t,k)=>{if(k>=s&&t.startsWith(todayKey)&&(rainPeak==null||H.precipitation_probability[k]>H.precipitation_probability[rainPeak])) rainPeak=k;});
+  return {regions,cities,sg:{cur:{temp:cur.temperature_2m,feels:cur.apparent_temperature,code:cur.weather_code,isDay:cur.is_day,hum:cur.relative_humidity_2m,dew:cur.dew_point_2m,wind:cur.wind_speed_10m,windDir:cur.wind_direction_10m,vis:cur.visibility!=null?cur.visibility/1000:null,uv:cur.uv_index},
+    hours,days,sunset:(D.sunset[0]||'').slice(11,16),popToday:D.precipitation_probability_max[0],
+    rainPeak:rainPeak!=null?{h:+H.time[rainPeak].slice(11,13),pop:H.precipitation_probability[rainPeak]}:null}};
+}
+// NEA PSI sub-index for 24-hr PM2.5 (µg/m³), used to estimate a daily PSI from forecast PM2.5
+function pm25ToPsi(c){
+  const C=[0,12,55,150,250,350,500], I=[0,50,100,200,300,400,500];
+  for(let i=1;i<C.length;i++) if(c<=C[i]) return Math.round(I[i-1]+(c-C[i-1])/(C[i]-C[i-1])*(I[i]-I[i-1]));
+  return 500;
+}
+
+/* ---------- state ---------- */
+const state={nea:exampleNEA(),neaMode:'example',om:exampleOM(),omMode:'example',checked:false,selected:'central'};
+try{const s=localStorage.getItem('hw-region'); if(REGIONS.some(r=>r.id===s)) state.selected=s;}catch(e){}
+const psiOf=id=>state.nea.psi[id];
+function top(){const pairs=REGIONS.map(r=>[r,psiOf(r.id)]).filter(p=>typeof p[1]==='number'); if(!pairs.length) return null; pairs.sort((a,b)=>b[1]-a[1]); return {r:pairs[0][0],hi:pairs[0][1],lo:pairs[pairs.length-1][1]};}
+
+/* ---------- icons ---------- */
+const ICON={
+  sun:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="#E9B24A"/></svg>',
+  haze:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="10" r="5" fill="#E9B24A" opacity=".7"/><path d="M4 16h16M6 19.5h12" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/></svg>',
+  cloud:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18h11a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 18z" fill="var(--b-none)"/></svg>',
+  storm:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 15h11a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 15z" fill="var(--b-none)"/><path d="M13 15l-2.5 4h3L11 23" stroke="#E9B24A" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  rain:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 14h11a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.6 1.5A3.3 3.3 0 0 0 7 14z" fill="var(--b-none)"/><path d="M9 17l-1 3M13 17l-1 3M17 17l-1 3" stroke="var(--rain)" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  moon:'<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4a8 8 0 1 0 5 13A7 7 0 0 1 15 4z" fill="var(--muted)" opacity=".6"/></svg>'
+};
+function iconKey(code,isDay,hazy){
+  if(code>=95) return 'storm';
+  if((code>=51&&code<=67)||(code>=80&&code<=82)) return 'rain';
+  if(code===45||code===48) return 'haze';
+  if(code===3) return 'cloud';
+  if(!isDay) return 'moon';
+  if(hazy) return 'haze';
+  return code===2?'cloud':'sun';
+}
+const hazyNow=()=>{const t=top(); return !!t&&t.hi>100;};
+
+/* ---------- map, chips, sheet ---------- */
+const K=2000,X=lon=>(lon-103.59)*K,Y=lat=>(1.475-lat)*K;
+const COAST=[[103.70,1.425],[103.73,1.445],[103.765,1.448],[103.80,1.455],[103.825,1.466],[103.85,1.455],[103.87,1.432],[103.90,1.42],[103.93,1.405],[103.96,1.39],[103.99,1.39],[104.02,1.376],[104.036,1.355],[104.01,1.33],[103.98,1.315],[103.94,1.302],[103.90,1.295],[103.875,1.28],[103.855,1.27],[103.83,1.262],[103.80,1.268],[103.77,1.278],[103.74,1.29],[103.71,1.298],[103.68,1.30],[103.65,1.293],[103.625,1.30],[103.608,1.318],[103.625,1.336],[103.65,1.352],[103.675,1.372],[103.69,1.398]];
+const path=pts=>'M'+pts.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join('L')+'Z';
+const bandVar=(x,B)=>{const b=band(x,B); return v(b?b[2]:'--b-none');};
+function drawMap(){
+  let s=`<defs><clipPath id="island"><path d="${path(COAST)}"/></clipPath></defs><g clip-path="url(#island)">`;
+  REGIONS.forEach(r=>{s+=`<path class="region" tabindex="0" role="button" data-id="${r.id}" aria-label="${r.name}: PSI ${fmt(psiOf(r.id))}" d="${path(r.poly)}" fill="${bandVar(psiOf(r.id),PSI_BANDS)}"/>`;});
+  const sel=REGIONS.find(r=>r.id===state.selected);
+  s+=`<path class="sel-outline" d="${path(sel.poly)}"/></g><path class="coast" d="${path(COAST)}"/>`;
+  REGIONS.forEach(r=>{const y=r.id==='south'?Y(1.287):r.id==='north'?Y(1.412):Y(r.lat);
+    s+=`<g class="maplabel" transform="translate(${X(r.lon)},${y})"><text class="v">${fmt(psiOf(r.id))}</text><text class="n" y="20">${r.name}</text></g>`;});
+  s+=`<text x="${X(103.62)}" y="${Y(1.47)}" fill="var(--muted)" style="font:500 13px var(--f-body);letter-spacing:.08em">JOHOR STRAIT</text>`;
+  s+=`<text x="${X(103.62)}" y="${Y(1.245)}" fill="var(--muted)" style="font:500 13px var(--f-body);letter-spacing:.08em">SINGAPORE STRAIT</text>`;
+  $('map').innerHTML=s;
+  $('map').querySelectorAll('path.region').forEach(p=>{
+    p.addEventListener('click',()=>select(p.dataset.id,true));
+    p.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(p.dataset.id,true)}});
+  });
+}
+function drawChips(){
+  $('chips').innerHTML=REGIONS.map(r=>`<button class="rchip" type="button" data-id="${r.id}" aria-pressed="${r.id===state.selected}"><i style="background:${bandVar(psiOf(r.id),PSI_BANDS)}"></i>${r.name} <span class="num">${fmt(psiOf(r.id))}</span></button>`).join('');
+  $('chips').querySelectorAll('.rchip').forEach(b=>b.addEventListener('click',()=>select(b.dataset.id,true)));
+}
+function drawSheet(){
+  const r=REGIONS.find(r=>r.id===state.selected), psi=psiOf(r.id), b=band(psi,PSI_BANDS);
+  const pm=state.nea.pm25[r.id], pb=band(pm,PM_BANDS), w=state.om.regions[r.id]||{};
+  const ex=state.omMode==='example'?'<span class="tag-ex">example</span>':'';
+  $('sh-name').textContent=r.name;
+  $('sh-psi').textContent=fmt(psi);
+  $('sh-pill').innerHTML=b?`<span class="pill" style="background:${v(b[2])}">${b[1]}</span>`:'';
+  $('sh-mark').style.left=pos(psi||0)+'%';
+  const ranked=REGIONS.filter(x=>typeof psiOf(x.id)==='number').sort((a,c)=>psiOf(c.id)-psiOf(a.id));
+  $('sh-kv').innerHTML=[
+    [state.nea.pm25is24?'24-hr PM2.5':'1-hr PM2.5',fmt(pm),'µg/m³'+(pb&&!state.nea.pm25is24?' · '+pb[1]:'')],
+    ['Temperature'+ex,fmt(w.temp),'°C'],['Humidity'+ex,fmt(w.hum),'%'],
+    ['Wind'+ex,fmt(w.wind),'km/h '+dir(w.windDir)],['Visibility'+ex,fmt(w.vis,1),'km'],
+    ['Rank',ranked.indexOf(r)+1||'—','of 5 regions']]
+    .map(([k,val,u])=>`<div><dt>${k}</dt><dd>${val}<small>${u}</small></dd></div>`).join('');
+  $('sh-hours').innerHTML=(w.next||[]).map(x=>`<div><b style="background:${bandVar(x.v,PM_BANDS)}">${fmt(x.v)}</b>${hShort(x.h)}</div>`).join('');
+  $('sh-advice').textContent=b?b[3]:'';
+}
+const mobile=()=>matchMedia('(max-width:900px)').matches;
+function openSheet(o){$('sheet').classList.toggle('open',o);$('scrim').classList.toggle('open',o); if(o) $('sh-close').focus({preventScroll:true});}
+function select(id,user){state.selected=id; try{localStorage.setItem('hw-region',id)}catch(e){} drawMap();drawChips();drawSheet(); if(user&&mobile()) openSheet(true);}
+$('sh-close').addEventListener('click',()=>openSheet(false));
+$('scrim').addEventListener('click',()=>openSheet(false));
+document.addEventListener('keydown',e=>{if(e.key==='Escape') openSheet(false)});
+
+/* ---------- hero, pollutants, advice, bands ---------- */
+function drawHero(){
+  const t=top();
+  if(!t){$('hero-psi').textContent='—';return;}
+  const b=band(t.hi,PSI_BANDS);
+  $('hero-psi').textContent=t.hi;
+  $('hero-band').textContent=b[1]; $('hero-band').style.color=v(b[2]);
+  let cmp=`Highest in ${t.r.name}.`;
+  const y=state.nea.psiYest&&state.nea.psiYest[t.r.id];
+  if(typeof y==='number'){const d=t.hi-y; cmp+=d===0?' Same as this time yesterday.':` ${d>0?'Up':'Down'} <span class="num">${Math.abs(d)}</span> from this time yesterday.`;}
+  cmp+=` Range across the island <span class="num">${t.lo}–${t.hi}</span>.`;
+  $('hero-cmp').innerHTML=cmp;
+  $('mark').style.left=pos(t.hi)+'%'; $('mark-v').textContent=t.hi;
+  $('hero-scale').setAttribute('aria-label',`PSI scale from 0 to 400, current reading ${t.hi} in the ${b[1]} band`);
+  // pollutants for the region with the highest PSI
+  const id=t.r.id, n=state.nea, sub=n.sub[id]||{};
+  const pols=[
+    {k:'PM2.5',val:n.pm25[id],u:n.pm25is24?'µg/m³ · 24-hr':`µg/m³ · 1-hr${band(n.pm25[id],PM_BANDS)?', '+band(n.pm25[id],PM_BANDS)[1]:''}`,si:sub.pm25,col:n.pm25is24?bandVar(sub.pm25,PSI_BANDS):bandVar(n.pm25[id],PM_BANDS)},
+    {k:'PM10',val:n.pm10[id],u:'µg/m³ · 24-hr',si:sub.pm10,col:bandVar(sub.pm10,PSI_BANDS)},
+    {k:'O₃',val:n.o3[id],u:'µg/m³ · 8-hr max',si:sub.o3,col:bandVar(sub.o3,PSI_BANDS)}];
+  const main=pols.reduce((a,p)=>(p.si||0)>(a.si||0)?p:a,pols[0]);
+  $('pol-head').textContent=`Pollutants in ${t.r.name}`;
+  $('pollutants').innerHTML=pols.map(p=>`<div class="pol${p===main&&p.si!=null?' primary':''}">${p===main&&p.si!=null?'<span class="tag">Main</span>':''}<span class="k">${p.k}</span><span class="v">${fmt(p.val)}</span><span class="u">${p.u}</span><span class="lvl"><b style="width:${Math.min(100,(p.val||0)/150*100)}%;background:${p.col}"></b></span></div>`).join('');
+  $('advice').innerHTML=(ADVICE[b[1]]||[]).map(a=>`<li>${a}</li>`).join('');
+  const rows=[['0–50',...PSI_BANDS[0]],['51–100',...PSI_BANDS[1]],['101–200',...PSI_BANDS[2]],['201–300',...PSI_BANDS[3]],['300+',...PSI_BANDS[4]]];
+  $('bands').innerHTML=rows.map(r=>`<li class="${r[2]===b[1]?'cur':''}" style="border-color:${v(r[3])}"><b>${r[0]}</b><span>${r[2]}${r[2]===b[1]?' · now':''}</span><span class="d">${r[4]}</span></li>`).join('');
+  const d=new Date(n.time);
+  $('nea-time').textContent=(state.neaMode==='live'?'NEA reading at ':'Example values from the NEA reading of ')+d.toLocaleString('en-SG',{timeZone:SGT,day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})+' SGT';
+}
+
+/* ---------- 24-hour strip ---------- */
+function drawStrip(){
+  const S=(state.nea.strip||[]).filter(x=>typeof x.v==='number');
+  if(!S.length){$('day24').innerHTML='';$('day24-axis').innerHTML='';$('day24-cap').textContent='No hourly PM2.5 readings available right now.';return;}
+  const mx=Math.max(80,...S.map(x=>x.v))*1.05;
+  $('day24').style.gridTemplateColumns=$('day24-axis').style.gridTemplateColumns=`repeat(${S.length},minmax(0,1fr))`;
+  $('day24').innerHTML=S.map((x,i)=>`<div class="${i===S.length-1?'now':''}" title="${hLong(x.h)}: ${x.v} µg/m³" style="height:${x.v/mx*100}%;background:${bandVar(x.v,PM_BANDS)}"></div>`).join('');
+  $('day24-axis').innerHTML=S.map((x,i)=>`<span>${i===S.length-1?'now':i%3===0?hShort(x.h):''}</span>`).join('');
+  const hi=S.reduce((a,x)=>x.v>a.v?x:a,S[0]), lo=S.reduce((a,x)=>x.v<a.v?x:a,S[0]);
+  const when=x=>`${hLong(x.h)}${x.day==='yesterday'?' yesterday':''}`;
+  const src=state.neaMode==='live'?'Highest 1-hr PM2.5 across the five NEA regions.':'Example values.';
+  $('day24-cap').innerHTML=`${src} Peak <span class="num">${hi.v}</span> µg/m³ at ${when(hi)}, lowest <span class="num">${lo.v}</span> at ${when(lo)}.`;
+  $('day24').setAttribute('aria-label',`Bar chart of hourly PM2.5 over the last 24 hours, from ${lo.v} to ${hi.v} micrograms per cubic metre`);
+}
+
+/* ---------- weather ---------- */
+const uvWord=u=>u==null?'':u<3?'Low':u<6?'Moderate':u<8?'High':u<11?'Very high':'Extreme';
+function drawWeather(){
+  const g=state.om.sg, c=g.cur, hz=hazyNow(), d0=g.days[0]||{};
+  const ex=state.omMode==='example'?'<span class="tag-ex">example</span>':'';
+  $('wx-temp').textContent=fmt(c.temp)+'°';
+  let cond=WMO[c.code]||'—'; if(hz&&c.code<=3) cond='Hazy, '+cond.toLowerCase();
+  $('wx-cond').innerHTML=esc(cond)+ex;
+  $('wx-sub').innerHTML=`Feels like <span class="num">${fmt(c.feels)}°</span> · High <span class="num">${fmt(d0.hi)}°</span> · Low <span class="num">${fmt(d0.lo)}°</span>`;
+  $('wx-icon').innerHTML=ICON[iconKey(c.code,c.isDay,hz)].replace('class="icon"','class="icon" style="width:64px;height:64px"');
+  $('hours').innerHTML=g.hours.map((h,i)=>`<div class="hour${i?'':' now-h'}"><span class="t">${i?hShort(h.h):'Now'}</span>${ICON[iconKey(h.code,h.isDay,hz)]}<span class="tp">${fmt(h.temp)}°</span><span class="rn">${h.pop?h.pop+'%':''}</span><span class="pm" title="PM2.5 ${fmt(h.pm)} µg/m³" style="background:${bandVar(h.pm,PM_BANDS)}"></span></div>`).join('');
+  const d=dir(c.windDir), smoke=hz&&['S','SW','W'].includes(d);
+  const rp=g.rainPeak;
+  const rainS=rp&&rp.pop>=40?`Most likely around ${hLong(rp.h)}`:(g.popToday||0)>=40?'Showers possible today':'Low chance today';
+  const tiles=[
+    ['Humidity',`${fmt(c.hum)}%`,`Dew point ${fmt(c.dew)}°`],
+    ['Wind',`${fmt(c.wind)} <small style="font-size:.7rem">km/h</small>`,`From ${d}${smoke?', can carry smoke from Sumatra':''}`],
+    ['Visibility',`${fmt(c.vis,1)} <small style="font-size:.7rem">km</small>`,c.vis==null?'':c.vis<10?(hz?'Reduced by haze':'Reduced'):'Good'],
+    ['UV index',fmt(c.uv),uvWord(c.uv)],
+    ['Rain',`${fmt(g.popToday)}%`,rainS],
+    ['Sunset',g.sunset?(+g.sunset.slice(0,2)%12||12)+g.sunset.slice(2):'—','pm SGT']];
+  $('tiles').innerHTML=tiles.map(t=>`<div class="tile"><span class="k">${t[0]}</span><span class="v">${t[1]}</span><span class="s">${t[2]}</span></div>`).join('');
+  const los=g.days.map(x=>x.lo).filter(x=>x!=null), his=g.days.map(x=>x.hi).filter(x=>x!=null);
+  const LO=Math.floor(Math.min(...los))-1, HI=Math.ceil(Math.max(...his))+1;
+  $('days').innerHTML=g.days.map(x=>{const b=band(x.psi,PSI_BANDS);
+    return `<div class="day"><span>${esc(x.label)}</span>${ICON[iconKey(x.code,1,x.psi>100)]}<span class="rn">${x.pop!=null?x.pop+'%':''}</span><span class="lo">${fmt(x.lo)}°</span><span class="range"><b style="left:${(x.lo-LO)/(HI-LO)*100}%;right:${100-(x.hi-LO)/(HI-LO)*100}%"></b></span><span class="hi">${fmt(x.hi)}°</span>
+    ${b?`<span class="haze"><i style="background:${v(b[2])}"></i><span>PSI about <span class="num">${x.psi}</span>, ${b[1].toLowerCase()}</span></span>`:''}</div>`}).join('');
+}
+
+/* ---------- ASEAN ---------- */
+function drawCities(){
+  $('cities').innerHTML=state.om.cities.map(c=>{const b=band(c.aqi,AQI_BANDS);
+    return `<article class="ct${c.hot?' hot':''}"><div class="row"><span class="k"><b>${esc(c.name)}</b>${esc(c.cc)}</span><i style="background:${v(b?b[2]:'--b-none')}"></i></div><span class="word" style="color:${v(b?b[2]:'--muted')}">${b?b[1]:'—'}</span><div class="foot"><span>AQI ${fmt(c.aqi)}</span><span>${fmt(c.temp)}°</span></div></article>`}).join('');
+}
+
+/* ---------- status ---------- */
+function drawStatus(){
+  const set=(id,mode,name)=>{const el=$(id); el.className='chip '+(!state.checked?'':mode==='live'?'live':'ex');
+    el.innerHTML=`<i></i>${name} ${!state.checked?'…':mode==='live'?'live':'example'}`;};
+  set('chip-nea',state.neaMode,'NEA PSI'); set('chip-om',state.omMode,'Open-Meteo');
+  if(!state.checked){$('updated').textContent='Checking live data…';$('notice').hidden=true;return;}
+  $('updated').textContent='Checked '+new Date().toLocaleTimeString('en-SG',{timeZone:SGT,hour:'numeric',minute:'2-digit'})+' SGT';
+  const msgs=[];
+  if(state.neaMode!=='live') msgs.push('<b>NEA could not be reached</b>, so PSI, the map and the 24-hour strip show example values from 6 Oct 2026.');
+  if(state.omMode!=='live') msgs.push('<b>Open-Meteo could not be reached</b>, so weather, forecasts and ASEAN cities show example values.');
+  const n=$('notice'); n.hidden=!msgs.length; if(msgs.length) n.innerHTML=msgs.join(' ')+' Try Refresh in a minute.';
+}
+function render(){drawStatus();drawHero();drawStrip();drawMap();drawChips();drawSheet();drawWeather();drawCities();}
+
+async function refresh(){
+  const btn=$('refresh'); btn.disabled=true; btn.textContent='Refreshing…';
+  const [n,o]=await Promise.allSettled([loadNEA(),loadOM()]);
+  if(n.status==='fulfilled'&&n.value){state.nea=n.value;state.neaMode='live';} else if(state.neaMode!=='live'){state.nea=exampleNEA();}
+  if(o.status==='fulfilled'){state.om=o.value;state.omMode='live';} else if(o.reason) console.warn('Open-Meteo:',o.reason);
+  state.checked=true;
+  try{render();}catch(e){console.error(e);}
+  btn.disabled=false; btn.textContent='Refresh';
+}
+render();
+$('refresh').addEventListener('click',refresh);
+refresh(); setInterval(refresh,15*60*1000);
+})();
+</script>
+</body>
+</html>
